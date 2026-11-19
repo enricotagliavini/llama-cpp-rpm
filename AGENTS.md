@@ -178,6 +178,38 @@ Behavior:
 The failure report file is git-ignored (`tools/.gitignore`) so it never trips
 `fedpkg`'s dirty-check.
 
+### Stale-patch regeneration (`tools/regen-patch.sh`)
+
+When `sync.sh` reports a stale patch, regenerate just that one (leaving the
+surviving patches untouched) with `tools/regen-patch.sh`. Run it *after* editing
+the working tree to the new intent:
+
+```bash
+./tools/regen-patch.sh patches/0001-llama-cpp.spec.diff          # overwrite in place
+./tools/regen-patch.sh patches/0001-llama-cpp.spec.diff --to new.diff   # write elsewhere
+```
+
+Behavior:
+
+1. Reconstructs the **pre-patch baseline** in a temp directory — pristine
+   upstream (materialized from the submodule) plus every patch that sorts
+   *before* the target, applied in order. It deliberately does **not** diff
+   against `HEAD`: HEAD still carries the old, now-replaced patch, so doing so
+   would double-apply the stale hunk.
+2. Diffs that baseline against your edited working tree (per target file) to
+   build the new patch. Your in-progress edits are never clobbered, and the real
+   working tree is left read-only (only the new patch file is written).
+3. Self-verifies: applies the generated patch to a fresh copy of the baseline
+   and confirms it reproduces your edited working tree. Exits non-zero with a
+   diagnostic if it does not, so a bad patch is caught before commit.
+
+Guards: errors if the target file is missing from the baseline (add/rename
+patches are not supported — edit-only); warns and exits 0 if your edit matches
+the baseline (empty patch); overwriting in place keeps the old patch recoverable
+from git history. This script is the regeneration half of the carry-over loop;
+`sync.sh` stays the forward-sync + failure-reporter. Commit the regenerated
+patch together with any bumped submodule pointer (see "fedpkg / git interaction").
+
 ### fedpkg / git interaction (build tooling)
 
 `fedpkg` (fedora's `rpkg` wrapper) interacts with git in ways that shape how we
