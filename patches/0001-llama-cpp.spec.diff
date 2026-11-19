@@ -1,0 +1,55 @@
+--- a/llama-cpp.spec
++++ b/llama-cpp.spec
+@@ -53,7 +53,7 @@
+ %endif
+ # broken on stx halo b9781
+ # Needs a maintainer
+-%bcond_with vulkan
++%bcond_without vulkan
+ 
+ %if %{with rocm}
+ %global build_hip ON
+@@ -88,6 +88,8 @@
+ BuildRequires:  libcurl-devel
+ BuildRequires:  gcc-c++
+ BuildRequires:  openmpi
++BuildRequires:  pthreadpool-devel
++BuildRequires:  cuda-toolkit
+ 
+ %if %{with check}
+ BuildRequires:  python3-devel
+@@ -219,16 +221,22 @@
+ %cmake \
+     -DCMAKE_INSTALL_LIBDIR=%{_lib} \
+     -DCMAKE_SKIP_RPATH=ON \
+-    -DGGML_AVX=OFF \
+-    -DGGML_AVX2=OFF \
++    -DDGGML_BACKEND_DL=ON \
++    -DGGML_AVX=ON \
++    -DGGML_AVX_VNNI=ON \
++    -DGGML_AVX2=ON \
+     -DGGML_AVX512=OFF \
+     -DGGML_AVX512_VBMI=OFF \
+     -DGGML_AVX512_VNNI=OFF \
+-    -DGGML_FMA=OFF \
+-    -DGGML_F16C=OFF \
++    -DGGML_FMA=ON \
++    -DGGML_F16C=ON \
+     -DGGML_HIP=%{build_hip} \
+     -DGGML_VULKAN=%{build_vulkan} \
+     -DGPU_TARGETS=%{rocm_gpu_list} \
++    -DGGML_CUDA=ON \
++    -DGGML_NATIVE=OFF \
++    -DCMAKE_CUDA_COMPILER=/usr/local/cuda-13.5/bin/nvcc \
++    -DCMAKE_CUDA_FLAGS="-Xcompiler -fPIC" \
+     -DLLAMA_BUILD_EXAMPLES=%{build_examples} \
+     -DLLAMA_BUILD_IS_DEV=OFF \
+     -DLLAMA_BUILD_TESTS=%{build_test}
+@@ -283,6 +291,7 @@
+ %if %{with vulkan}
+ %{_libdir}/libggml-vulkan.so.*
+ %endif
++%{_libdir}/libggml-cuda.so.*
+ %{_bindir}/llama
+ %{_bindir}/llama-batched-bench
+ %{_bindir}/llama-bench

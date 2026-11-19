@@ -1,0 +1,355 @@
+# For the extra python package gguf that comes with llama-cpp
+%global pypi_name gguf
+%global pypi_version 0.10.0
+
+# Some optional subpackages
+%bcond_with examples
+%if %{with examples}
+%global build_examples ON
+%else
+%global build_examples OFF
+%endif
+
+%bcond_with test
+%if %{with test}
+%global build_test ON
+%else
+%global build_test OFF
+%endif
+
+%bcond_with check
+
+Summary:        Port of Facebook's LLaMA model in C/C++
+Name:           llama-cpp
+
+# Licensecheck reports
+#
+# *No copyright* The Unlicense
+# ----------------------------
+# common/base64.hpp
+# common/stb_image.h
+# These are public domain
+#
+# MIT License
+# -----------
+# LICENSE
+# ...
+# This is the main license
+
+License:        MIT AND Apache-2.0 AND LicenseRef-Fedora-Public-Domain
+Version:        b11232
+Release:        %autorelease
+
+URL:            https://github.com/ggerganov/llama.cpp
+Source0:        %{url}/archive/%{version}.tar.gz#/llama.cpp-%{version}.tar.gz
+
+# aarch64 needs a maintainer
+ExclusiveArch:  x86_64 aarch64
+
+%ifarch x86_64
+%bcond_without rocm
+%else
+%bcond_with rocm
+%endif
+# broken on stx halo b9781
+# Needs a maintainer
+%bcond_without vulkan
+
+%if %{with rocm}
+%global build_hip ON
+%global toolchain rocm
+# hipcc does not support some clang flags
+%global build_cxxflags %(echo %{optflags} | sed -e 's/-fstack-protector-strong/-Xarch_host -fstack-protector-strong/' -e 's/-fcf-protection/-Xarch_host -fcf-protection/' -e 's/-mtls-dialect=gnu2//')
+%else
+%global build_hip OFF
+%global toolchain gcc
+%endif
+# gfx1250 has a problem
+# ggml/src/ggml-cuda/template-instances/../common.cuh:759:18: error:
+#   instruction not supported on this GPU (gfx1250): v_dot2_f32_f16
+#  759 |     asm volatile("v_dot2_f32_f16 %0, %1, %2, %0" : "+v"(acc) : "v"(v), "v"(u));
+#
+# need our own gpu list, without gfx1250
+%global rocm_gpu_list "gfx9-generic;gfx942;gfx950;gfx10-1-generic;gfx10-3-generic;gfx1100;gfx1101;gfx1102;gfx1103;gfx1150;gfx1151;gfx1152;gfx1153;gfx1200;gfx1201"
+
+%if %{with vulkan}
+%global build_vulkan ON
+%else
+%global build_vulkan OFF
+%endif
+
+BuildRequires:  cmake
+BuildRequires:  curl
+BuildRequires:  git
+BuildRequires:  wget
+BuildRequires:  xxd
+BuildRequires:  langpacks-en
+# above are packages in .github/workflows/server.yml
+BuildRequires:  libcurl-devel
+BuildRequires:  gcc-c++
+BuildRequires:  openmpi
+BuildRequires:  pthreadpool-devel
+BuildRequires:  cuda-toolkit
+
+%if %{with check}
+BuildRequires:  python3-devel
+BuildRequires:  python3dist(jinja2)
+%endif
+
+%if %{with examples}
+BuildRequires:  python3-devel
+BuildRequires:  python3dist(pip)
+BuildRequires:  python3dist(poetry)
+%endif
+
+%if %{with rocm}
+BuildRequires:  hipblas-devel
+BuildRequires:  rocm-comgr-devel
+BuildRequires:  rocm-hip-devel
+BuildRequires:  rocblas-devel
+BuildRequires:  hipblas-devel
+BuildRequires:  rocm-runtime-devel
+BuildRequires:  rocm-rpm-macros
+
+Requires:       hipblas
+Requires:       rocblas
+%endif
+
+%if %{with vulkan}
+BuildRequires:  glslc
+BuildRequires:  spirv-headers-devel
+BuildRequires:  vulkan-loader-devel
+%endif
+
+Requires:       curl
+Recommends:     numactl
+
+%description
+The main goal of llama.cpp is to run the LLaMA model using 4-bit
+integer quantization on a MacBook
+
+* Plain C/C++ implementation without dependencies
+* Apple silicon first-class citizen - optimized via ARM NEON, Accelerate
+  and Metal frameworks
+* AVX, AVX2 and AVX512 support for x86 architectures
+* Mixed F16 / F32 precision
+* 2-bit, 3-bit, 4-bit, 5-bit, 6-bit and 8-bit integer quantization support
+* CUDA, Metal and OpenCL GPU backend support
+
+The original implementation of llama.cpp was hacked in an evening.
+Since then, the project has improved significantly thanks to many
+contributions. This project is mainly for educational purposes and
+serves as the main playground for developing new features for the
+ggml library.
+
+%package devel
+Summary:        Port of Facebook's LLaMA model in C/C++
+Requires:       %{name}%{?_isa} = %{version}-%{release}
+
+%description devel
+The main goal of llama.cpp is to run the LLaMA model using 4-bit
+integer quantization on a MacBook
+
+* Plain C/C++ implementation without dependencies
+* Apple silicon first-class citizen - optimized via ARM NEON, Accelerate
+  and Metal frameworks
+* AVX, AVX2 and AVX512 support for x86 architectures
+* Mixed F16 / F32 precision
+* 2-bit, 3-bit, 4-bit, 5-bit, 6-bit and 8-bit integer quantization support
+* CUDA, Metal and OpenCL GPU backend support
+
+The original implementation of llama.cpp was hacked in an evening.
+Since then, the project has improved significantly thanks to many
+contributions. This project is mainly for educational purposes and
+serves as the main playground for developing new features for the
+ggml library.
+
+%if %{with test}
+%package test
+Summary:        Tests for %{name}
+Requires:       %{name}%{?_isa} = %{version}-%{release}
+
+%description test
+%{summary}
+%endif
+
+%if %{with examples}
+%package examples
+Summary:        Examples for %{name}
+Requires:       %{name}%{?_isa} = %{version}-%{release}
+Requires:       python3dist(numpy)
+Requires:       python3dist(torch)
+Requires:       python3dist(sentencepiece)
+
+%description examples
+%{summary}
+%endif
+
+%prep
+%autosetup -p1 -n llama.cpp-%{version}
+
+# gcc 15 include cstdint
+sed -i '/#include <vector.*/a#include <cstdint>' src/llama-mmap.h
+ 
+# no android needed
+rm -rf exmples/llma.android
+# git cruft
+find . -name '.gitignore' -exec rm -rf {} \;
+
+# Some lib*-impl's do not have so versions, so make them static
+sed -i -e 's@add_library(${TARGET} @add_library(${TARGET} STATIC @' tools/batched-bench/CMakeLists.txt
+sed -i -e 's@add_library(${TARGET} @add_library(${TARGET} STATIC @' tools/llama-bench/CMakeLists.txt
+sed -i -e 's@add_library(${TARGET} @add_library(${TARGET} STATIC @' tools/cli/CMakeLists.txt
+sed -i -e 's@add_library(${TARGET} @add_library(${TARGET} STATIC @' tools/completion/CMakeLists.txt
+sed -i -e 's@add_library(${TARGET} @add_library(${TARGET} STATIC @' tools/fit-params/CMakeLists.txt
+sed -i -e 's@add_library(${TARGET} @add_library(${TARGET} STATIC @' tools/perplexity/CMakeLists.txt
+sed -i -e 's@add_library(${TARGET} @add_library(${TARGET} STATIC @' tools/quantize/CMakeLists.txt
+sed -i -e 's@add_library(${TARGET}@add_library(${TARGET} STATIC @' tools/server/CMakeLists.txt
+
+%build
+
+%if %{with examples}
+cd %{_vpath_srcdir}/gguf-py
+%pyproject_wheel
+cd -
+%endif
+
+%if %{with rocm}
+export HIPCC_COMPILE_FLAGS_APPEND="--offload-compress"
+%endif
+
+%cmake \
+    -DCMAKE_INSTALL_LIBDIR=%{_lib} \
+    -DCMAKE_SKIP_RPATH=ON \
+    -DDGGML_BACKEND_DL=ON \
+    -DGGML_AVX=ON \
+    -DGGML_AVX_VNNI=ON \
+    -DGGML_AVX2=ON \
+    -DGGML_AVX512=OFF \
+    -DGGML_AVX512_VBMI=OFF \
+    -DGGML_AVX512_VNNI=OFF \
+    -DGGML_FMA=ON \
+    -DGGML_F16C=ON \
+    -DGGML_HIP=%{build_hip} \
+    -DGGML_VULKAN=%{build_vulkan} \
+    -DGPU_TARGETS=%{rocm_gpu_list} \
+    -DGGML_CUDA=ON \
+    -DGGML_NATIVE=OFF \
+    -DCMAKE_CUDA_COMPILER=/usr/local/cuda-13.5/bin/nvcc \
+    -DCMAKE_CUDA_FLAGS="-Xcompiler -fPIC" \
+    -DLLAMA_BUILD_EXAMPLES=%{build_examples} \
+    -DLLAMA_BUILD_IS_DEV=OFF \
+    -DLLAMA_BUILD_TESTS=%{build_test}
+
+%cmake_build
+
+%install
+%if %{with examples}
+cd %{_vpath_srcdir}/gguf-py
+%pyproject_install
+cd -
+%endif
+
+%cmake_install
+
+rm -rf %{buildroot}%{_libdir}/libggml_shared.*
+
+%if %{with examples}
+mkdir -p %{buildroot}%{_datarootdir}/%{name}
+cp -r %{_vpath_srcdir}/examples %{buildroot}%{_datarootdir}/%{name}/
+cp -r %{_vpath_srcdir}/models %{buildroot}%{_datarootdir}/%{name}/
+cp -r %{_vpath_srcdir}/README.md %{buildroot}%{_datarootdir}/%{name}/
+rm -rf %{buildroot}%{_datarootdir}/%{name}/examples/llama.android
+%endif
+
+# Static libraries are used in build, do not package them
+rm -rf %{buildroot}%{_libdir}/lib*.a
+
+%if %{with test}
+%if %{with check}
+%check
+# cpu results
+#   16 - test-tokenizers-ggml-vocabs (Failed)              main
+# rocm 10.0 gfx1100 results
+#   16 - test-tokenizers-ggml-vocabs (Failed)              main
+export LD_LIBRARY_PATH=$PWD/%{_vpath_builddir}/bin
+%ctest
+%endif
+%endif
+
+%files
+%license LICENSE
+%{_libdir}/libllama.so.*
+%{_libdir}/libllama-common.so.*
+%{_libdir}/libmtmd.so.*
+%{_libdir}/libggml.so.*
+%{_libdir}/libggml-base.so.*
+%{_libdir}/libggml-cpu.so.*
+%if %{with rocm}
+%{_libdir}/libggml-hip.so.*
+%endif
+%if %{with vulkan}
+%{_libdir}/libggml-vulkan.so.*
+%endif
+%{_libdir}/libggml-cuda.so.*
+%{_bindir}/llama
+%{_bindir}/llama-batched-bench
+%{_bindir}/llama-bench
+%{_bindir}/llama-cli
+%{_bindir}/llama-completion
+%{_bindir}/llama-cvector-generator
+%{_bindir}/llama-export-lora
+%{_bindir}/llama-fit-params
+%{_bindir}/llama-gguf-split
+%{_bindir}/llama-imatrix
+%{_bindir}/llama-mtmd-cli
+%{_bindir}/llama-perplexity
+%{_bindir}/llama-quantize
+%{_bindir}/llama-results
+%{_bindir}/llama-server
+%{_bindir}/llama-tokenize
+%{_bindir}/llama-tts
+
+%files devel
+%dir %{_libdir}/cmake/llama
+%dir %{_libdir}/cmake/ggml
+%doc README.md
+%{_includedir}/gguf.h
+%{_includedir}/ggml*.h
+%{_includedir}/llama*.h
+%{_includedir}/mtmd*.h
+%{_libdir}/libllama.so
+%{_libdir}/libllama-common.so
+%{_libdir}/libmtmd.so
+%{_libdir}/libggml.so
+%{_libdir}/libggml-base.so
+%{_libdir}/libggml-cpu.so
+%if %{with rocm}
+%{_libdir}/libggml-hip.so
+%endif
+%if %{with vulkan}
+%{_libdir}/libggml-vulkan.so
+%endif
+%{_libdir}/cmake/llama/*.cmake
+%{_libdir}/cmake/ggml/*.cmake
+%{_libdir}/pkgconfig/llama.pc
+
+%if %{with test}
+%files test
+%{_bindir}/test-*
+%endif
+
+%if %{with examples}
+%files examples
+%{_bindir}/convert_hf_to_gguf.py
+%{_bindir}/gguf-*
+%{_bindir}/llama-*
+%{_datarootdir}/%{name}/
+%{_libdir}/libllava_shared.so
+%{python3_sitelib}/%{pypi_name}
+%{python3_sitelib}/%{pypi_name}*.dist-info
+%{python3_sitelib}/scripts
+%endif
+
+%changelog
+%autochangelog
