@@ -253,6 +253,30 @@ patches, commit them *together* with the new submodule pointer. Keep stray
 helper files out of the committed tree (commit, ignore, or delete them) —
 untracked files make `fedpkg build` fail.
 
+### Full build for testing (expensive — confirm first)
+
+A **full build + test** (e.g. `fedpkg test` / tmt `plans/full.fmf`, or a real
+`rpmbuild`/mock run that actually compiles the backends) takes a **very long
+time** — it compiles the entire `llama.cpp` tree, including every optional GPU
+backend (`libggml-cuda`, `-hip`, `-vulkan`) with their CUDA/HIP/ROCm
+toolchains.
+
+**Rule:** never attempt a full build for testing on your own initiative. Always
+get explicit user confirmation first. When you only need to validate a spec or
+patch change, prefer the cheap verification steps below that don't compile the
+sources:
+
+- **`fedpkg srpm`** (local SRPM) — `rpmbuild -bs` on the local spec +
+  `sources/`; does not check the repo, does not compile.
+- **`rpmbuild -bp` BuildRequires resolution** — rpmbuild resolves `BuildRequires`
+  *before* `%prep`, so a dependency-check failure reveals whether `%bcond` /
+  `%if %{with}` gating evaluates correctly (e.g. it pulled `cuda-toolkit` into
+  the required list, proving `%bcond_without cuda` → `%if %{with cuda}` →
+  `BuildRequires: cuda-toolkit` is ON by default).
+
+A full compile is only justified when you need to exercise `%cmake` / `%files`
+gating or actually run the tests.
+
 ### Work-tree helpers
 
 Helper spec copies (`llama-cpp.spec.bak`, `llama-cpp.spec.orig`,
