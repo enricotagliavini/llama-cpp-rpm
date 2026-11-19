@@ -1,0 +1,3 @@
+# Transient artifacts produced by tools/sync.sh (never committed).
+.sync-failure.json
+.sync/

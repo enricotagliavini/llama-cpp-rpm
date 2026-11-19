@@ -146,6 +146,38 @@ where "our changes" are always `git diff upstream.golden ours.golden` (never
 stale, but requires keeping `upstream.golden` updated and is less standard).
 Patch-based was chosen for isolation, reviewability, and dist-git convention.
 
+### Sync loop (`tools/sync.sh`)
+
+The carry-over loop itself is committed in `tools/sync.sh` (not part of the
+derived dist-git tree — the dist-git root files come only from `upstream/`
++ `patches/`). Run it to sync:
+
+```bash
+./tools/sync.sh                    # happy path: fetch → advance submodule →
+                                   # re-materialize root → re-apply patches → commit
+./tools/sync.sh "custom commit msg" # optional explicit commit message
+```
+
+Behavior:
+
+1. Fetch `upstream/rawhide` and move the submodule to its tip.
+2. Re-materialize the root from upstream's tracked files, so the tree always
+   reflects the pristine upstream snapshot (minus our patches).
+3. Re-apply `patches/` in sorted order (`git apply`).
+4. If everything applies, stage the delta — submodule pointer + the dist-git
+   root files — using an **explicit** `git add` path list (never `git add -A`,
+   so `deleteme/` is never staged), then commit. **Push is not automatic**; a
+   reminder is printed.
+5. If a patch does not apply, the loop emits a **structured failure report**
+   (JSON written to `tools/.sync-failure.json`, plus the failing patch's target
+   file contents) and **stops without committing** — the submodule pointer
+   advance is discarded. The report names the patch, its target file, the new
+   upstream commit, the `git apply` error, and our intent (the patch itself),
+   with steps to regenerate it. Then fix the patch and re-run.
+
+The failure report file is git-ignored (`tools/.gitignore`) so it never trips
+`fedpkg`'s dirty-check.
+
 ### fedpkg / git interaction (build tooling)
 
 `fedpkg` (fedora's `rpkg` wrapper) interacts with git in ways that shape how we
