@@ -54,6 +54,7 @@ ExclusiveArch:  x86_64 aarch64
 # broken on stx halo b9781
 # Needs a maintainer
 %bcond_without vulkan
+%bcond_without cuda
 
 %if %{with rocm}
 %global build_hip ON
@@ -78,6 +79,12 @@ ExclusiveArch:  x86_64 aarch64
 %global build_vulkan OFF
 %endif
 
+%if %{with cuda}
+%global build_cuda ON
+%else
+%global build_cuda OFF
+%endif
+
 BuildRequires:  cmake
 BuildRequires:  curl
 BuildRequires:  git
@@ -89,7 +96,9 @@ BuildRequires:  libcurl-devel
 BuildRequires:  gcc-c++
 BuildRequires:  openmpi
 BuildRequires:  pthreadpool-devel
+%if %{with cuda}
 BuildRequires:  cuda-toolkit
+%endif
 
 %if %{with check}
 BuildRequires:  python3-devel
@@ -233,10 +242,12 @@ export HIPCC_COMPILE_FLAGS_APPEND="--offload-compress"
     -DGGML_HIP=%{build_hip} \
     -DGGML_VULKAN=%{build_vulkan} \
     -DGPU_TARGETS=%{rocm_gpu_list} \
-    -DGGML_CUDA=ON \
-    -DGGML_NATIVE=OFF \
-    -DCMAKE_CUDA_COMPILER=/usr/local/cuda-13.5/bin/nvcc \
-    -DCMAKE_CUDA_FLAGS="-Xcompiler -fPIC" \
+    -DGGML_CUDA=%{build_cuda}
+    %if %{with cuda}
+    -DGGML_NATIVE=OFF
+    -DCMAKE_CUDA_COMPILER=/usr/local/cuda-13.5/bin/nvcc
+    -DCMAKE_CUDA_FLAGS="-Xcompiler -fPIC"
+    %endif
     -DLLAMA_BUILD_EXAMPLES=%{build_examples} \
     -DLLAMA_BUILD_IS_DEV=OFF \
     -DLLAMA_BUILD_TESTS=%{build_test}
@@ -291,7 +302,9 @@ export LD_LIBRARY_PATH=$PWD/%{_vpath_builddir}/bin
 %if %{with vulkan}
 %{_libdir}/libggml-vulkan.so.*
 %endif
+%if %{with cuda}
 %{_libdir}/libggml-cuda.so.*
+%endif
 %{_bindir}/llama
 %{_bindir}/llama-batched-bench
 %{_bindir}/llama-bench
