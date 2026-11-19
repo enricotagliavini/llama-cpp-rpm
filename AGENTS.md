@@ -210,6 +210,21 @@ from git history. This script is the regeneration half of the carry-over loop;
 `sync.sh` stays the forward-sync + failure-reporter. Commit the regenerated
 patch together with any bumped submodule pointer (see "fedpkg / git interaction").
 
+### Tooling note: `git -C` + `apply`
+
+`git -C <dir> apply <patch>` resolves the **patch file path** relative to `<dir>`
+— its own cwd — **not** the process cwd, so a relative `patches/…` path fails to
+open ("No such file or directory"). Pass an **absolute** path to the patch file
+to find it; the patch's internal `a//b/` paths still apply correctly against
+`<dir>`'s tree regardless.
+
+Both tool scripts use `git apply` under `<dir>` and must therefore pass absolute
+patch paths. `regen-patch.sh` applies surviving patches into a temp baseline and
+self-verifies against another temp dir, so both of its `git -C … apply` calls use
+absolute paths (`"$ABS_PATCH_DIR/$p"` and `$(absolutize "$OUT")`). The forward
+`sync.sh` loop runs `git apply` **without** `-C`, so its `patches/…` paths
+resolve against the repo root and stay correct.
+
 ### fedpkg / git interaction (build tooling)
 
 `fedpkg` (fedora's `rpkg` wrapper) interacts with git in ways that shape how we
