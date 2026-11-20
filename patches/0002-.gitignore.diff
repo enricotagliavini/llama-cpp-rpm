@@ -1,0 +1,10 @@
+--- a/.gitignore
++++ b/.gitignore
+@@ -13,3 +13,7 @@
+ /llama.cpp-b10353.tar.gz
+ /llama.cpp-b10630.tar.gz
+ /llama.cpp-b11232.tar.gz
++
++# fedpkg build artifacts
++*.src.rpm
++/results_llama-cpp-rpm/

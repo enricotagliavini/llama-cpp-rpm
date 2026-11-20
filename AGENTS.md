@@ -208,7 +208,7 @@ the working tree to the new intent:
 
 ```bash
 ./tools/regen-patch.sh patches/0001-llama-cpp.spec.diff          # overwrite in place
-./tools/regen-patch.sh patches/0001-llama-cpp.spec.diff --to new.diff   # write elsewhere
+./tools/regen-patch.sh patches/0001-llama-cpp.spec.diff --to /tmp/p   # write to a dir
 ```
 
 Behavior:
@@ -218,21 +218,34 @@ Behavior:
    *before* the target, applied in order. It deliberately does **not** diff
    against `HEAD`: HEAD still carries the old, now-replaced patch, so doing so
    would double-apply the stale hunk.
-2. Diffs that baseline against your edited working tree (per target file) to
-   build the new patch. Your in-progress edits are never clobbered, and the real
-   working tree is left read-only (only the new patch file is written).
-3. Self-verifies: applies the generated patch to a fresh copy of the baseline
-   and confirms it reproduces your edited working tree. Exits non-zero with a
-   diagnostic if it does not, so a bad patch is caught before commit.
+2. Diffs that baseline against your edited working tree **for every file tracked
+   in the submodule** and writes **one patch per differing file** — a fresh
+   patch for each file whose content differs. Files already in the pre-patch
+   baseline that match the working tree are skipped, so in the common
+   single-file case this rewrites just that one patch. Your in-progress edits
+   are never clobbered, and the real working tree is left read-only (only the
+   generated patch files are written).
+3. **Numbering:** each patch is named `<N>-<tracked-filename>.diff`. If the
+   file already has a patch (e.g. `0001-llama-cpp.spec.diff`), its numeric
+   prefix is reused; brand-new files are appended after the highest existing
+   number, so patch numbers stay stable across regens, are independent of which
+   patch you targeted, and never orphan a patch.
+4. Self-verifies: applies **every** generated patch to a fresh copy of the
+   baseline and confirms the whole tree reproduces your edited working tree.
+   Exits non-zero with a diagnostic if it does not, so a bad patch is caught
+   before commit.
 
 Guards: errors (without truncating the existing patch) if the current patch
 does not parse — add/rename patches are not supported (edit-only) — and
 tolerates a trailing timestamp on the current patch's `a/<file>` header; warns
 and exits 0 if your edit matches the baseline (empty patch); overwriting in
-place keeps the old patch recoverable from git history. This script is the
+place keeps the old patch recoverable from git history. `--to <dir>` takes a
+**directory**: it writes the generated patches there (staging them for
+inspection without touching the real patch set), whereas without `--to` each
+file rewrites its own existing patch in place. This script is the
 regeneration half of the carry-over loop;
 `sync.sh` stays the forward-sync + failure-reporter. Commit the regenerated
-patch together with any bumped submodule pointer (see "fedpkg / git interaction").
+patch(es) together with any bumped submodule pointer (see "fedpkg / git interaction").
 
 ### Tooling note: `git -C` + `apply`
 
