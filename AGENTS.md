@@ -225,11 +225,16 @@ Behavior:
    single-file case this rewrites just that one patch. Your in-progress edits
    are never clobbered, and the real working tree is left read-only (only the
    generated patch files are written).
-3. **Numbering:** each patch is named `<N>-<tracked-filename>.diff`. If the
-   file already has a patch (e.g. `0001-llama-cpp.spec.diff`), its numeric
-   prefix is reused; brand-new files are appended after the highest existing
-   number, so patch numbers stay stable across regens, are independent of which
-   patch you targeted, and never orphan a patch.
+3. **Numbering:** each patch is named `<N>-<tracked-filename>.diff`. A file in a
+   subdirectory is flattened into the name (`plans/full.fmf` →
+   `0004-plans-full.fmf.diff`); the real path is preserved in the patch's
+   `a//b/` headers, so it still applies to `plans/full.fmf`. If the file already
+   has a patch (e.g. `0001-llama-cpp.spec.diff`), its numeric prefix is reused;
+   brand-new files are appended after the highest existing number. A number is
+   consumed only when a patch is actually emitted, so a file that matches the
+   pre-patch baseline is skipped without leaving a gap. Patch numbers stay
+   stable across regens, are independent of which patch you targeted, and never
+   orphan a patch.
 4. Self-verifies: applies **every** generated patch to a fresh copy of the
    baseline and confirms the whole tree reproduces your edited working tree.
    Exits non-zero with a diagnostic if it does not, so a bad patch is caught
