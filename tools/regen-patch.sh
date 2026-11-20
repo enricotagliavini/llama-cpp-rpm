@@ -46,18 +46,42 @@ PATCH_DIR="patches"          # our layered patch set
 # an absolute path to find the file itself; its internal a//b/ paths then apply
 # correctly against <dir>'s tree.
 ABS_PATCH_DIR="$(cd "$PATCH_DIR" && pwd)"
+# When set, refresh every existing patch (baseline = pristine upstream) instead
+# of a single named target. Brand-new files with no patch yet are skipped
+# (see emit_patches); add those explicitly by passing a patch as the argument.
+REGEN_ALL=0
 
 # ---- small helpers ----------------------------------------------------------
 
 # Print usage and exit (2 = command-line misuse).
 usage() {
     cat >&2 <<USAGE
-usage: tools/regen-patch.sh <patch> [--to <output-path>]
-  <patch>   path to the stale patch under patches/ to regenerate
-  --to      directory to write the regenerated patch(es) here instead of
-            overwriting the patch(es) in patches/ (default: patches/)
-The working tree is assumed to already hold your edited intent (set up after
-tools/sync.sh failed). This script does not fetch or move the submodule.
+usage: tools/regen-patch.sh [patch] [--to <output-dir>]
+
+Regenerate the patch(es) that carry our changes over a stale Fedora upstream.
+Run it after tools/sync.sh fails on a patch; the working tree should already
+hold the new intent. This script does not fetch or move the submodule.
+
+Arguments:
+  [patch]   path to a stale patch under patches/ to regenerate. When omitted,
+            refresh every EXISTING patch (the baseline is pristine upstream);
+            files with no patch yet are skipped — add those explicitly.
+
+Options:
+  --to      write the regenerated patch(es) here instead of overwriting them
+            in patches/ (default: patches/). Handy to inspect before committing.
+
+Examples:
+  # Regenerate the patch that carries llama-cpp.spec (rewrites 0001 in place).
+  ./tools/regen-patch.sh patches/0001-llama-cpp.spec.diff
+
+  # Add a patch for a new file (tracked in fedora-src, no patch yet): pass any
+  # existing patch as the target so a baseline is built; the new file is
+  # numbered after the highest existing patch, e.g. 0003-ggml.h.diff.
+  ./tools/regen-patch.sh patches/0002-.gitignore.diff
+
+  # Refresh every existing patch in one shot, for convenience.
+  ./tools/regen-patch.sh
 USAGE
     exit 2
 }
@@ -73,6 +97,7 @@ die() {
 parse_args() {
     PATCH=""
     TO=""
+    REGEN_ALL=0
     while [ $# -gt 0 ]; do
         case "$1" in
             --to) [ $# -ge 2 ] || die "--to needs a path"; TO="$2"; shift 2 ;;
@@ -82,6 +107,12 @@ parse_args() {
             *) [ -z "$PATCH" ] && PATCH="$1"; shift ;;
         esac
     done
+    # No positional argument: regenerate ALL existing patches (convenience).
+    # Use an if, not a `test && assign`, so parse_args returns 0 when PATCH is
+    # set — a non-zero function return would trip set -e on the call in main.
+    if [ -z "$PATCH" ]; then
+        REGEN_ALL=1
+    fi
 }
 
 # Resolve a path relative to the repo root into an absolute one. Needed wherever
@@ -138,15 +169,21 @@ materialize_pristine() {
     done < <(git -C "$UPSTREAM_PATH" ls-files)
 }
 
-# Apply every patch in PATCH_DIR except <target>, into <dest>, in sorted order.
-# The baseline therefore matches the state that exists immediately before the
-# target patch — earlier changes are accounted for, and the target's old hunk is
-# not re-applied.
-apply_patches_except_target() {
-    local dest="$1" target="$2" p
+# Build the pre-patch baseline in <dest>: materialize pristine fedora-src, then
+# apply the surviving patches in sorted order. In the explicit (single-target)
+# path every patch is applied except the target, so the baseline matches the
+# state just before it and the target's old hunk is not re-applied. In the
+# no-argument regen-all path (REGEN_ALL) every patch is skipped, so the baseline
+# is pristine upstream; because each tracked file is owned by exactly one patch,
+# this yields identical per-file diffs and lets a patch be refreshed without
+# naming it.
+build_baseline() {
+    local dest="$1" p
+    materialize_pristine "$dest"
     while IFS= read -r p; do
         [ -n "$p" ] || continue
-        [ "$p" = "$target" ] && continue
+        [ "$REGEN_ALL" = 1 ] && continue
+        [ -n "$PATCH" ] && [ "$p" = "$(basename "$PATCH")" ] && continue
         if ! git -C "$dest" apply "$ABS_PATCH_DIR/$p"; then
             die "patch $p did not apply to the baseline (the committed patch set is itself broken?)"
         fi
@@ -189,6 +226,8 @@ gen_patch_for() {
 emit_patches() {
     local out_dir="$1" baseline="$2" f existing num out
     generated=()
+    generated_files=()
+    skipped_new=0
     for f in $TARGET_FILES; do
         [ -n "$f" ] || continue
         # Number: reuse an existing patch's prefix for this file, otherwise append
@@ -198,10 +237,18 @@ emit_patches() {
         if [ -n "$existing" ]; then
             num="$(printf '%04d' "$((10#$existing))")"
         else
+            # Brand-new file with no patch yet: only emitted in the explicit
+            # (single-target) path. The no-argument regen-all path refreshes
+            # existing patches only; new patches must be added explicitly.
+            if [ "$REGEN_ALL" = 1 ]; then
+                skipped_new=$((skipped_new + 1))
+                continue
+            fi
             num="$(printf '%04d' "$next_num")"
         fi
         if out="$(gen_patch_for "$f" "$out_dir" "$num" "$baseline")"; then
             generated+=("$out")
+            generated_files+=("$f")
             [ -z "$existing" ] && next_num=$((next_num + 1))
         fi
     done
@@ -219,7 +266,7 @@ verify_against_working_tree() {
             return 1
         fi
     done
-    for f in $TARGET_FILES; do
+    for f in "${generated_files[@]}"; do
         [ -n "$f" ] || continue
         if ! cmp -s "$check/$f" "$ROOT_DIR/$f"; then
             echo "regen-patch.sh: mismatch after applying generated patch to $f" >&2
@@ -236,8 +283,10 @@ verify_against_working_tree() {
 # edited working tree.
 main() {
     parse_args "$@"
-    [ -n "$PATCH" ] || usage
-    [ -f "$PATCH" ] || die "no such patch: $PATCH"
+    if [ "$REGEN_ALL" = 0 ]; then
+        [ -n "$PATCH" ] || usage
+        [ -f "$PATCH" ] || die "no such patch: $PATCH"
+    fi
 
     # Files carried over as patches = everything tracked in the pristine submodule.
     # Deriving this from the submodule (not the patch headers) lets a patch freely
@@ -262,14 +311,15 @@ main() {
     }
     trap cleanup EXIT
 
-    # Reconstruct the pre-patch baseline.
-    materialize_pristine "$BASELINE"
-    apply_patches_except_target "$BASELINE" "$(basename "$PATCH")"
+    # Reconstruct the pre-patch baseline (pristine upstream, with surviving
+    # patches applied — all but the target in the explicit path, none in the
+    # no-argument regen-all path).
+    build_baseline "$BASELINE"
 
     # Validate that every target file exists in both the baseline and the working
     # tree before we write anything, so a broken state fails clearly instead of
     # producing a corrupt patch.
-    local f g
+    local f g skipped_new=0
     for f in $TARGET_FILES; do
         [ -n "$f" ] || continue
         [ -f "$BASELINE/$f" ] || die "'$f' is not in the pre-patch baseline — is it still tracked in $UPSTREAM_PATH?"
@@ -288,6 +338,13 @@ main() {
     for g in "${generated[@]}"; do
         echo "  $g"
     done
+
+    # In the no-argument regen-all path, files with no patch yet are skipped.
+    # Nudge the user to add those explicitly rather than silently dropping them.
+    if [ "$REGEN_ALL" = 1 ] && [ "$skipped_new" -gt 0 ]; then
+        echo "regen-patch.sh: note — skipped $skipped_new file(s) with no existing patch; add them explicitly, e.g.:" >&2
+        echo "    ./tools/regen-patch.sh patches/0001-llama-cpp.spec.diff" >&2
+    fi
 
     # Self-verify: apply every generated patch to a fresh baseline copy and confirm
     # the whole tree reproduces the edited working tree.
