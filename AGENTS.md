@@ -329,6 +329,11 @@ passes and they don't muddy the canonical `patches/`.
 
 ## Conventions
 
+- **Indentation in `tools/`: 4 spaces** (tabs also acceptable, but stay
+  consistent — 4 spaces is the default). Every shell script under `tools/`
+  (`sync.sh`, `regen-patch.sh`) is indented with 4 spaces; keep it that way and
+  do not fall back to 2-space. 4 spaces keep `git diff` readable and avoid
+  tab-width drift between editors.
 - Keep our local changes **isolated and reviewable** against current Fedora —
   diff inside the submodule against its own branch, e.g. `git -C fedora-src diff
   <base>..<branch>`.
