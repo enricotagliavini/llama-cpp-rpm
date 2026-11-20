@@ -111,26 +111,45 @@ current Fedora.
   commit) — never edited directly.
 - `patches/` holds our patch files — the **canonical, reproducible record of
   "our changes."**
-- The **root working tree = `fedora-src/` + `patches/` applied**, and *that is
-  what we commit.* `patches/` is the source of truth; the committed tree is
-  derived from it. The Fedora version is tracked by the **submodule
-  pointer**, not by repo commits (so our history stays isolated and reviewable
-  against the submodule's own branch — `git -C fedora-src diff <base>..<branch>`).
+- The **root working tree = *copies* of `fedora-src/`'s tracked files +
+  `patches/` applied on top**, and *that is what we commit.* `patches/` is the
+  source of truth; the committed tree is derived from it. The copies are
+  refreshed by `tools/sync.sh`'s **re-materialize** step on every sync, so
+  unmodified files stay fresh as long as you sync through the loop (not by
+  moving the submodule pointer by hand). The Fedora version is tracked by the
+  **submodule pointer**, not by repo commits (so our history stays isolated and
+  reviewable against the submodule's own branch — `git -C fedora-src diff
+  <base>..<branch>`).
 
 **Why:** patch-based converts stale-patch recovery into "regenerate a diff"
 rather than resolving a conflict, which keeps the loop automatable and easy for
 an AI agent to adjust.
 
-**Carry-over = bump the submodule pointer (one-liner):**
-`git submodule update --remote fedora-src` (or pin a known commit) → re-apply
-`patches/` → commit the delta (pointer + regenerated patches) → `git push
-origin`.
+**Carry-over = run `tools/sync.sh` (never move the pointer by hand):**
+
+```bash
+./tools/sync.sh                    # happy path: fetch, advance submodule,
+                                   # re-materialize root, re-apply patches, commit
+./tools/sync.sh "custom commit msg" # optional explicit commit message
+```
+
+This is the single path that bumps the version. It advances the submodule,
+**re-materializes the root tree from Fedora's tracked files** (this is what
+keeps unmodified files fresh), re-applies `patches/`, commits the delta
+(submodule pointer + materialized root files + regenerated patches), and
+prints a push reminder. **Do not** bump with `git submodule update --remote
+fedora-src` alone: that only moves the pointer and leaves the root's unmodified
+files stale; the re-materialize must stay paired with the bump. Likewise, never
+commit a root-tree snapshot that wasn't produced by `tools/sync.sh` --
+hand-editing and committing the materialized files out of band breaks the
+patch-based carry-over.
 
 **Automation (as far as possible):**
 
 - A repeatable **sync loop** (happy path, no Fedora conflict) is fully
   automated: fetch the submodule's `rawhide` branch → point the submodule
-  pointer at the new tip → apply patches → commit the delta → push.
+  pointer at the new tip → **re-materialize the root** from the submodule's
+  tracked files → apply patches → commit the delta → (reminder to push).
 - When a patch goes stale, the loop **fails fast** and emits a **structured
   failure report** so an AI coding agent can regenerate just that patch: which
   patch, which hunk, the new Fedora context around the failed hunk, and our
