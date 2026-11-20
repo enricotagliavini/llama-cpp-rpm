@@ -225,10 +225,12 @@ Behavior:
    and confirms it reproduces your edited working tree. Exits non-zero with a
    diagnostic if it does not, so a bad patch is caught before commit.
 
-Guards: errors if the target file is missing from the baseline (add/rename
-patches are not supported — edit-only); warns and exits 0 if your edit matches
-the baseline (empty patch); overwriting in place keeps the old patch recoverable
-from git history. This script is the regeneration half of the carry-over loop;
+Guards: errors (without truncating the existing patch) if the current patch
+does not parse — add/rename patches are not supported (edit-only) — and
+tolerates a trailing timestamp on the current patch's `a/<file>` header; warns
+and exits 0 if your edit matches the baseline (empty patch); overwriting in
+place keeps the old patch recoverable from git history. This script is the
+regeneration half of the carry-over loop;
 `sync.sh` stays the forward-sync + failure-reporter. Commit the regenerated
 patch together with any bumped submodule pointer (see "fedpkg / git interaction").
 

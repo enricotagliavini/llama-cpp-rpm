@@ -2,14 +2,14 @@
 #
 # sync.sh -- carry-over sync loop for the llama-cpp RPM fork (layered repo).
 #
-# Keeps the root dist-git tree in sync with the pristine `upstream/` submodule
+# Keeps the root dist-git tree in sync with the pristine `fedora-src/` submodule
 # while carrying our own changes (recorded as patches/) over with minimal
 # friction.
 #
 # Flow:
-#   1. Fetch the upstream dist-git remote; point the submodule at the latest
-#      rawhide commit.
-#   2. Materialize the root tree from the (new) pristine upstream tracked files.
+#   1. Fetch the fedora-src submodule's rawhide branch; point the submodule at
+#      the latest rawhide commit.
+#   2. Materialize the root tree from the (new) pristine fedora-src tracked files.
 #   3. Re-apply patches/ (sorted) on top of the materialized tree.
 #   4. If every patch applies, commit the delta (submodule pointer + changed
 #      dist-git files) and report success.
@@ -18,7 +18,7 @@
 #
 # Notes:
 #   - Never pushes; commits locally and prints a reminder.
-#   - Never touches deleteme/ or the upstream submodule's own history.
+#   - Never touches deleteme/ or the fedora-src submodule's own history.
 #   - The dist-git root files are committed from an explicit path list, so
 #     unrelated / untracked files (deleteme/) are never staged.
 #
@@ -28,7 +28,7 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT_DIR"
 
-UPSTREAM_PATH="upstream"
+UPSTREAM_PATH="fedora-src"
 UPSTREAM_BRANCH="rawhide"
 UPSTREAM_REMOTE="https://src.fedoraproject.org/rpms/llama-cpp.git"
 PATCH_DIR="patches"
@@ -73,10 +73,10 @@ git -C "$UPSTREAM_PATH" reset --hard --quiet FETCH_HEAD
 
 NEW_POINTER="$(git -C "$UPSTREAM_PATH" rev-parse HEAD)"
 if [ "$OLD_POINTER" != "$NEW_POINTER" ]; then
-  LOG "upstream/$UPSTREAM_BRANCH advanced: $OLD_POINTER -> $NEW_POINTER"
+  LOG "fedora-src/$UPSTREAM_BRANCH advanced: $OLD_POINTER -> $NEW_POINTER"
   git add "$UPSTREAM_PATH"
 else
-  LOG "upstream/$UPSTREAM_BRANCH unchanged: $NEW_POINTER"
+  LOG "fedora-src/$UPSTREAM_BRANCH unchanged: $NEW_POINTER"
 fi
 
 # ---- 2. materialize the root from upstream tracked files --------------------

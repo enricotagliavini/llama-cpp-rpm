@@ -230,7 +230,7 @@ export HIPCC_COMPILE_FLAGS_APPEND="--offload-compress"
 %cmake \
     -DCMAKE_INSTALL_LIBDIR=%{_lib} \
     -DCMAKE_SKIP_RPATH=ON \
-    -DDGGML_BACKEND_DL=ON \
+    -DGGML_BACKEND_DL=ON \
     -DGGML_AVX=ON \
     -DGGML_AVX_VNNI=ON \
     -DGGML_AVX2=ON \
@@ -242,12 +242,8 @@ export HIPCC_COMPILE_FLAGS_APPEND="--offload-compress"
     -DGGML_HIP=%{build_hip} \
     -DGGML_VULKAN=%{build_vulkan} \
     -DGPU_TARGETS=%{rocm_gpu_list} \
-    -DGGML_CUDA=%{build_cuda}
-    %if %{with cuda}
-    -DGGML_NATIVE=OFF
-    -DCMAKE_CUDA_COMPILER=/usr/local/cuda-13.5/bin/nvcc
-    -DCMAKE_CUDA_FLAGS="-Xcompiler -fPIC"
-    %endif
+    -DGGML_CUDA=%{build_cuda} \
+    %{?with_cuda:-DCMAKE_CUDA_COMPILER=/usr/local/cuda-13.5/bin/nvcc -DCMAKE_CUDA_FLAGS="-Xcompiler -fPIC" -DGGML_NATIVE=OFF} \
     -DLLAMA_BUILD_EXAMPLES=%{build_examples} \
     -DLLAMA_BUILD_IS_DEV=OFF \
     -DLLAMA_BUILD_TESTS=%{build_test}

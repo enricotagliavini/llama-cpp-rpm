@@ -5,29 +5,30 @@
 # Use it after `tools/sync.sh` fails on a patch. Full loop:
 #
 #   1. ./tools/sync.sh                 # fails fast, emits a structured report
-#   2. edit the working tree to the new intent. At this point upstream is
+#   2. edit the working tree to the new intent. At this point fedora-src is
 #      already at the new commit and the stale patch was NOT applied, so your
-#      edits sit on top of pristine upstream + the surviving (earlier) patches.
+#      edits sit on top of pristine fedora-src + the surviving (earlier) patches.
 #   3. ./tools/regen-patch.sh patches/0001-llama-cpp.spec.diff
 #      -> writes a fresh patch capturing "pristine upstream -> your edits".
 #   4. ./tools/sync.sh                 # verifies the new patch applies cleanly
 #
 # The pre-patch baseline is reconstructed in a temporary directory from pristine
-# upstream + the patches that sort *before* the target, so earlier changes are
+# fedora-src + the patches that sort *before* the target, so earlier changes are
 # accounted for and your in-progress edits are never clobbered. The baseline is
 # deliberately NOT `HEAD` (HEAD still carries the old, now-replaced patch),
 # which would double-apply the stale hunk.
 #
-# This script is read-only with respect to the real tree: it only writes the new
-# patch file (default: overwriting the stale patch, which is still recoverable
-# from git history).
+# This script is read-only with respect to the real tree: on success it only
+# writes the new patch file (default: overwriting the stale patch, which is
+# still recoverable from git history); if the current patch does not parse it
+# errors out WITHOUT truncating it.
 #
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT_DIR"
 
-UPSTREAM_PATH="upstream"
+UPSTREAM_PATH="fedora-src"
 PATCH_DIR="patches"
 # Absolute path to patches/. `git -C <dir> apply <patch>` resolves the patch
 # file path relative to <dir> (its own cwd), not the process cwd, so we hand it
@@ -62,7 +63,10 @@ done
 [ -f "$PATCH" ] || { echo "regen-patch.sh: no such patch: $PATCH" >&2; exit 2; }
 
 # Target files of the patch (a/ b/ "---" headers), in order, de-duplicated.
-target_files() { sed -n 's/^--- [ab]\///p' "$1" | awk '!seen[$0]++'; }
+# `cut -f1` drops the tab-delimited timestamp that `diff -u` appends to the
+# `--- a/<file>\t<timestamp>` header, so this parses both timestamped and
+# clean patches.
+target_files() { sed -n 's/^--- [ab]\///p' "$1" | cut -f1 | awk '!seen[$0]++'; }
 
 # Absolute form of a path given relative to the repo root. Needed wherever we
 # hand a path to `git -C <dir>`: that resolves the argument against <dir>, not
@@ -80,7 +84,7 @@ CHECK=""
 cleanup() { rm -rf "$BASELINE" "$CHECK"; }
 trap cleanup EXIT
 
-# Materialize pristine upstream into the baseline directory.
+# Materialize pristine fedora-src into the baseline directory.
 while IFS= read -r f; do
   mkdir -p "$BASELINE/$(dirname "$f")"
   cp -f "$UPSTREAM_PATH/$f" "$BASELINE/$f"
@@ -99,20 +103,31 @@ while IFS= read -r p; do
 done < <(ls -1 "$PATCH_DIR" | sort)
 
 # --- diff baseline vs the edited working tree --------------------------------
-OUT="${TO:-$PATCH}"
-mkdir -p "$(dirname "$OUT")"
-: > "$OUT"
-any_change=0
-while IFS= read -r f; do
-  [ -z "$f" ] && continue
+# Validate the parsed target list BEFORE truncating $OUT: if the current patch
+# has no parseable '--- a/' headers (or carries an unparsed timestamp after the
+# path), TARGET_FILES would be empty or bogus. Error out here so a parse
+# failure can never clobber the user's existing patch.
+if [ -z "$TARGET_FILES" ]; then
+  echo "regen-patch.sh: no target file parsed from $PATCH — the current patch is empty or has no '--- a/' headers." >&2
+  exit 1
+fi
+for f in $TARGET_FILES; do
   if [ ! -f "$BASELINE/$f" ]; then
-    echo "regen-patch.sh: baseline has no $f — regenerating add/rename patches is not supported yet (edit-only)." >&2
+    echo "regen-patch.sh: parsed target '$f' not in the pre-patch baseline — the current patch's header is unparseable (e.g. a trailing timestamp after 'a/llama-cpp.spec'); regenerating such a patch is not supported." >&2
     exit 1
   fi
   if [ ! -f "$ROOT_DIR/$f" ]; then
     echo "regen-patch.sh: working tree has no $f — did you edit it before running this?" >&2
     exit 1
   fi
+done
+
+OUT="${TO:-$PATCH}"
+mkdir -p "$(dirname "$OUT")"
+: > "$OUT"
+any_change=0
+while IFS= read -r f; do
+  [ -z "$f" ] && continue
   rc=0
   diff -u -L "a/$f" -L "b/$f" "$BASELINE/$f" "$ROOT_DIR/$f" >> "$OUT" || rc=$?
   if [ "$rc" -eq 1 ]; then
@@ -147,5 +162,16 @@ done <<< "$TARGET_FILES"
 if [ "$bad" -ne 0 ]; then
   exit 1
 fi
+
+# --- verify: ensure the generated patch applies cleanly to pristine upstream ---
+#     This catches the case where the working tree differs from HEAD and
+#     the old patch would have been based on HEAD, not upstream.
+if ! git -C "$UPSTREAM_PATH" apply --check --verbose "$(absolutize "$OUT")" 2>/dev/null; then
+  echo "regen-patch.sh: WARNING — generated patch does not apply cleanly to fedora-src submodule:" >&2
+  echo "  This suggests the working tree differs from HEAD. The regenerated patch" >&2
+  echo "  captures the current state (upstream -> working tree), which is correct." >&2
+  echo "  Run './tools/sync.sh' to commit the regenerated patch." >&2
+fi
+
 echo "regen-patch.sh: verified — the generated patch reproduces your edited working tree."
 exit 0
