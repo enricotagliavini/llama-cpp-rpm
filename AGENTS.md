@@ -14,14 +14,13 @@ engine) as RPMs for Fedora, with a few local modifications on top of Fedora.
 - **Fedora source (pristine, pinned):** Fedora dist-git `llama-cpp` at
   `https://src.fedoraproject.org/rpms/llama-cpp`, checked out as a **git
   submodule** at `fedora-src/`. It is pristine — we never edit its files
-  directly; we only move the submodule pointer to a new commit. (The git
-  remote `fedora-src` is fetch-only.)
+  directly; we only move the submodule pointer to a new commit.
 - **Our changes:** stored as patch files in `patches/`; the **root working
   tree** = `fedora-src/` + `patches/` applied, and that is what is committed.
 - **Personal / home repo:** GitHub `enricotagliavini/llama-cpp-rpm` (git remote
   `origin`).
-- **Current Fedora version carried:** `b11232` (see `Version:` in the spec;
-  `Release:` uses `%autorelease`).
+- **Current Fedora version carried:** reflected in the `Version:` field of the
+  spec (mirrors the submodule's pinned commit); `Release:` uses `%autorelease`.
 
 ## North-star objective
 
@@ -41,8 +40,8 @@ Fedora.
 ## Repository layout (fmf dist-git, `.fmf/version = 1`)
 
 - `fedora-src/` — the **pristine Fedora source git submodule** (pinned to a
-  commit, currently `b11232`'s dist-git). We never edit its files directly.
-  Moving this submodule pointer is how we "carry over" a new version.
+  commit). We never edit its files directly. Moving this submodule pointer is
+  how we "carry over" a new version.
 - `patches/` — our own patch files. **The canonical, reproducible record of
   "our changes";** the root working tree is derived from `fedora-src/` +
   `patches/`.
@@ -50,8 +49,9 @@ Fedora.
   bundles the CPU code plus all optional backends, gated with `%if` /
   `%bcond_with`. This is the starting point for the modularity refactor.
 - `sources` — a file holding the **SHA512 checksum** of the Fedora source
-  tarball (`llama.cpp-b11232.tar.gz`). The spec's `Source0` fetches the tarball
-  from Fedora at build time; this file records the expected digest.
+  tarball (whose name matches the pinned submodule version). The spec's
+  `Source0` fetches the tarball from Fedora at build time; this file records the
+  expected digest.
 - `.fmf/` — fmf (Fedora Metadata) files: currently just `version`.
 - `plans/` — tmt plans (e.g. `plans/full.fmf`, which runs the Fedora test
   suite). The **build/test automation** is separate from the
@@ -60,10 +60,12 @@ Fedora.
 
 ## Remotes (push/fetch rules)
 
-- `fedora-src` — **fetch only** (no push). Fedora source of truth. Its contents
-  live in this repo as the `fedora-src/` submodule (see "Repository layout").
-- `origin` — **push to this repo** (your home repo). This is where commits land.
-- Working branch: `rawhide` (tracks `fedora-src/rawhide`).
+This repo keeps `main` as its working branch. There is only **one** git remote:
+
+- `origin` — **push to this repo** (your home repo, `enricotagliavini/llama-cpp-rpm`); this is where commits land.
+
+The Fedora source is **not** a remote — it is the pristine `fedora-src/` submodule (see "Repository layout"), whose remote URL is fetch-only. The submodule tracks its own `rawhide` branch (Fedora's main development line); bumping the version means pointing the submodule at the tip of that branch (`git submodule update --remote fedora-src`, or pinning a known commit), never by pushing to a Fedora remote.
+
 - **The submodule pointer is a commit.** Bumping Fedora means `git submodule
   update --remote fedora-src` (or pinning a known commit); commit that pointer
   change together with any regenerated patches — do not leave it uncommitted
@@ -113,7 +115,7 @@ current Fedora.
   what we commit.* `patches/` is the source of truth; the committed tree is
   derived from it. The Fedora version is tracked by the **submodule
   pointer**, not by repo commits (so our history stays isolated and reviewable
-  — `git diff fedora-src/rawhide`).
+  against the submodule's own branch — `git -C fedora-src diff <base>..<branch>`).
 
 **Why:** patch-based converts stale-patch recovery into "regenerate a diff"
 rather than resolving a conflict, which keeps the loop automatable and easy for
@@ -127,8 +129,8 @@ origin`.
 **Automation (as far as possible):**
 
 - A repeatable **sync loop** (happy path, no Fedora conflict) is fully
-  automated: `fetch fedora-src → point submodule at new commit → apply patches →
-  commit the delta → push`.
+  automated: fetch the submodule's `rawhide` branch → point the submodule
+  pointer at the new tip → apply patches → commit the delta → push.
 - When a patch goes stale, the loop **fails fast** and emits a **structured
   failure report** so an AI coding agent can regenerate just that patch: which
   patch, which hunk, the new Fedora context around the failed hunk, and our
@@ -160,7 +162,8 @@ derived dist-git tree — the dist-git root files come only from `fedora-src/`
 
 Behavior:
 
-1. Fetch `fedora-src/rawhide` and move the submodule to its tip.
+1. Fetch the submodule's own `rawhide` branch and move the submodule pointer to
+   its tip.
 2. Re-materialize the root from Fedora's tracked files, so the tree always
    reflects the pristine Fedora snapshot (minus our patches).
 3. Re-apply `patches/` in sorted order (`git apply`).
@@ -287,9 +290,11 @@ passes and they don't muddy the canonical `patches/`.
 
 ## Conventions
 
-- Keep our local changes **isolated and reviewable** against current Fedora
-  (`git diff fedora-src/rawhide`).
-- Do not push to `fedora-src`; push only to `origin`.
+- Keep our local changes **isolated and reviewable** against current Fedora —
+  diff inside the submodule against its own branch, e.g. `git -C fedora-src diff
+  <base>..<branch>`.
+- Do not push to the Fedora source (the `fedora-src/` submodule); push only to
+  `origin`.
 - Bumping the Fedora version means updating `Version:` and the digest in
   `sources` (and re-fetching the tarball at build time).
 - See `AGENTS.md` here first for repo context; the spec itself for build details.
