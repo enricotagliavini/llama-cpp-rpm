@@ -292,15 +292,15 @@ export LD_LIBRARY_PATH=$PWD/%{_vpath_builddir}/bin
 %{_libdir}/libmtmd.so.*
 %{_libdir}/libggml.so.*
 %{_libdir}/libggml-base.so.*
-%{_libdir}/libggml-cpu.so.*
+%{_libdir}/%{name}/libggml-cpu.so
 %if %{with rocm}
-%{_libdir}/%{name}/libggml-hip.so.*
+%{_libdir}/%{name}/libggml-hip.so
 %endif
 %if %{with vulkan}
-%{_libdir}/%{name}/libggml-vulkan.so.*
+%{_libdir}/%{name}/libggml-vulkan.so
 %endif
 %if %{with cuda}
-%{_libdir}/%{name}/libggml-cuda.so.*
+%{_libdir}/%{name}/libggml-cuda.so
 %endif
 %{_bindir}/llama
 %{_bindir}/llama-batched-bench
@@ -333,16 +333,6 @@ export LD_LIBRARY_PATH=$PWD/%{_vpath_builddir}/bin
 %{_libdir}/libmtmd.so
 %{_libdir}/libggml.so
 %{_libdir}/libggml-base.so
-%{_libdir}/libggml-cpu.so
-%if %{with rocm}
-%{_libdir}/libggml-hip.so
-%endif
-%if %{with vulkan}
-%{_libdir}/libggml-vulkan.so
-%endif
-%if %{with cuda}
-%{_libdir}/libggml-cuda.so
-%endif
 %{_libdir}/cmake/llama/*.cmake
 %{_libdir}/cmake/ggml/*.cmake
 %{_libdir}/pkgconfig/llama.pc

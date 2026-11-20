@@ -60,29 +60,36 @@
      -DLLAMA_BUILD_EXAMPLES=%{build_examples} \
      -DLLAMA_BUILD_IS_DEV=OFF \
      -DLLAMA_BUILD_TESTS=%{build_test}
-@@ -278,10 +294,13 @@
+@@ -276,12 +292,15 @@
+ %{_libdir}/libmtmd.so.*
+ %{_libdir}/libggml.so.*
  %{_libdir}/libggml-base.so.*
- %{_libdir}/libggml-cpu.so.*
+-%{_libdir}/libggml-cpu.so.*
++%{_libdir}/%{name}/libggml-cpu.so
  %if %{with rocm}
 -%{_libdir}/libggml-hip.so.*
-+%{_libdir}/%{name}/libggml-hip.so.*
++%{_libdir}/%{name}/libggml-hip.so
  %endif
  %if %{with vulkan}
 -%{_libdir}/libggml-vulkan.so.*
-+%{_libdir}/%{name}/libggml-vulkan.so.*
++%{_libdir}/%{name}/libggml-vulkan.so
 +%endif
 +%if %{with cuda}
-+%{_libdir}/%{name}/libggml-cuda.so.*
++%{_libdir}/%{name}/libggml-cuda.so
  %endif
  %{_bindir}/llama
  %{_bindir}/llama-batched-bench
-@@ -321,6 +340,9 @@
- %if %{with vulkan}
- %{_libdir}/libggml-vulkan.so
- %endif
-+%if %{with cuda}
-+%{_libdir}/libggml-cuda.so
-+%endif
+@@ -314,13 +333,6 @@
+ %{_libdir}/libmtmd.so
+ %{_libdir}/libggml.so
+ %{_libdir}/libggml-base.so
+-%{_libdir}/libggml-cpu.so
+-%if %{with rocm}
+-%{_libdir}/libggml-hip.so
+-%endif
+-%if %{with vulkan}
+-%{_libdir}/libggml-vulkan.so
+-%endif
  %{_libdir}/cmake/llama/*.cmake
  %{_libdir}/cmake/ggml/*.cmake
  %{_libdir}/pkgconfig/llama.pc
