@@ -119,9 +119,6 @@ BuildRequires:  rocblas-devel
 BuildRequires:  hipblas-devel
 BuildRequires:  rocm-runtime-devel
 BuildRequires:  rocm-rpm-macros
-
-Requires:       hipblas
-Requires:       rocblas
 %endif
 
 %if %{with vulkan}
@@ -150,6 +147,51 @@ Since then, the project has improved significantly thanks to many
 contributions. This project is mainly for educational purposes and
 serves as the main playground for developing new features for the
 ggml library.
+
+# Optional GPU backend libraries are split into their own top-level
+# subpackages (see the modularity plan in AGENTS.md). Each one requires the
+# base package at the exact same release so a backend and its CLI tools can
+# never be installed at diverging versions.
+%if %{with cuda}
+%package cuda
+Summary:        CUDA backend for %{name}
+Requires:       %{name}%{?_isa} = %{version}-%{release}
+# CUDA runtime + cuBLAS + driver sonames. The NEEDED ones are also pulled in
+# by the automatic dependency generator, but list them explicitly so the
+# intent is clear and a missing libcuda.so.1 cannot slip through.
+Requires:       libcublas.so.13()(64bit)
+Requires:       libcudart.so.13()(64bit)
+Requires:       libcuda.so.1()(64bit)
+
+%description cuda
+The CUDA GPU backend for the ggml library used by %{name}.
+Provides the %{name}/libggml-cuda.so module, which the CLI tools
+load dynamically at runtime.
+%endif
+
+%if %{with vulkan}
+%package vulkan
+Summary:        Vulkan backend for %{name}
+Requires:       %{name}%{?_isa} = %{version}-%{release}
+
+%description vulkan
+The Vulkan GPU backend for the ggml library used by %{name}.
+Provides the %{name}/libggml-vulkan.so module, which the CLI tools
+load dynamically at runtime.
+%endif
+
+%if %{with rocm}
+%package hip
+Summary:        ROCm/HIP backend for %{name}
+Requires:       %{name}%{?_isa} = %{version}-%{release}
+Requires:       hipblas
+Requires:       rocblas
+
+%description hip
+The ROCm/HIP GPU backend for the ggml library used by %{name}.
+Provides the %{name}/libggml-hip.so module, which the CLI tools
+load dynamically at runtime.
+%endif
 
 %package devel
 Summary:        Port of Facebook's LLaMA model in C/C++
@@ -293,15 +335,6 @@ export LD_LIBRARY_PATH=$PWD/%{_vpath_builddir}/bin
 %{_libdir}/libggml.so.*
 %{_libdir}/libggml-base.so.*
 %{_libdir}/%{name}/libggml-cpu.so
-%if %{with rocm}
-%{_libdir}/%{name}/libggml-hip.so
-%endif
-%if %{with vulkan}
-%{_libdir}/%{name}/libggml-vulkan.so
-%endif
-%if %{with cuda}
-%{_libdir}/%{name}/libggml-cuda.so
-%endif
 %{_bindir}/llama
 %{_bindir}/llama-batched-bench
 %{_bindir}/llama-bench
@@ -319,6 +352,21 @@ export LD_LIBRARY_PATH=$PWD/%{_vpath_builddir}/bin
 %{_bindir}/llama-server
 %{_bindir}/llama-tokenize
 %{_bindir}/llama-tts
+
+%if %{with cuda}
+%files cuda
+%{_libdir}/%{name}/libggml-cuda.so
+%endif
+
+%if %{with vulkan}
+%files vulkan
+%{_libdir}/%{name}/libggml-vulkan.so
+%endif
+
+%if %{with rocm}
+%files hip
+%{_libdir}/%{name}/libggml-hip.so
+%endif
 
 %files devel
 %dir %{_libdir}/cmake/llama
