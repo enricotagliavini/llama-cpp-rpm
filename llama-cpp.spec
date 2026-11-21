@@ -95,7 +95,6 @@ BuildRequires:  langpacks-en
 BuildRequires:  libcurl-devel
 BuildRequires:  gcc-c++
 BuildRequires:  openmpi
-BuildRequires:  pthreadpool-devel
 %if %{with cuda}
 BuildRequires:  cuda-toolkit
 %endif
