@@ -339,8 +339,6 @@ export LD_LIBRARY_PATH=$PWD/%{_vpath_builddir}/bin
 %{_bindir}/llama-bench
 %{_bindir}/llama-cli
 %{_bindir}/llama-completion
-%{_bindir}/llama-cvector-generator
-%{_bindir}/llama-export-lora
 %{_bindir}/llama-fit-params
 %{_bindir}/llama-gguf-split
 %{_bindir}/llama-imatrix

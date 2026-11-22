@@ -121,7 +121,7 @@
      -DLLAMA_BUILD_EXAMPLES=%{build_examples} \
      -DLLAMA_BUILD_IS_DEV=OFF \
      -DLLAMA_BUILD_TESTS=%{build_test}
-@@ -276,13 +333,7 @@
+@@ -276,20 +333,12 @@
  %{_libdir}/libmtmd.so.*
  %{_libdir}/libggml.so.*
  %{_libdir}/libggml-base.so.*
@@ -136,7 +136,14 @@
  %{_bindir}/llama
  %{_bindir}/llama-batched-bench
  %{_bindir}/llama-bench
-@@ -301,6 +352,21 @@
+ %{_bindir}/llama-cli
+ %{_bindir}/llama-completion
+-%{_bindir}/llama-cvector-generator
+-%{_bindir}/llama-export-lora
+ %{_bindir}/llama-fit-params
+ %{_bindir}/llama-gguf-split
+ %{_bindir}/llama-imatrix
+@@ -301,6 +350,21 @@
  %{_bindir}/llama-tokenize
  %{_bindir}/llama-tts
  
@@ -158,7 +165,7 @@
  %files devel
  %dir %{_libdir}/cmake/llama
  %dir %{_libdir}/cmake/ggml
-@@ -314,13 +380,6 @@
+@@ -314,13 +378,6 @@
  %{_libdir}/libmtmd.so
  %{_libdir}/libggml.so
  %{_libdir}/libggml-base.so
