@@ -104,7 +104,7 @@
 +    -DGGML_BACKEND_DL=ON \
 +    -DGGML_BACKEND_DIR=%{_libdir}/%{name} \
 +    -DGGML_AVX=ON \
-+    -DGGML_AVX_VNNI=ON \
++    -DGGML_AVX_VNNI=OFF \
 +    -DGGML_AVX2=ON \
      -DGGML_AVX512=OFF \
      -DGGML_AVX512_VBMI=OFF \
