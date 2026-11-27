@@ -69,15 +69,44 @@ errjson() {
 
 # ---- preconditions ----------------------------------------------------------
 
-# Ensure the submodule directory and the repo work tree both exist before we
-# touch anything. Exit 2 on either failure.
+# Ensure the repo is a git work tree pointing at a known upstream before we
+# touch anything. An *absent* submodule is intentionally NOT rejected here:
+# check_preconditions no longer requires $UPSTREAM_PATH to exist on disk, so
+# ensure_submodule_ready can clone it (it sees '-' from 'git submodule status')
+# instead of aborting. A missing '.gitmodules' still fails later, when
+# 'git submodule status' errors out.
 check_preconditions() {
-    if [ ! -d "$UPSTREAM_PATH" ]; then
-        echo "FATAL: $UPSTREAM_PATH submodule is not present" >&2; exit 2
-    fi
     if ! git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
         echo "FATAL: $ROOT_DIR is not a git work tree" >&2; exit 2
     fi
+}
+
+# Ensure the pristine upstream submodule is checked out before we fetch/advance
+# it or re-materialize its tracked files. An uninitialized submodule (-…fedora-src)
+# looks harmless to `git -C fedora-src ...` during fetch, but fails at materialize
+# ("cannot change to fedora-src"); worse, without this guard sync.sh advances the
+# recorded pointer first and dies mid-loop with no structured failure report. We
+# read `git submodule status`, whose first column encodes each submodule's state:
+# ' ' up-to-date, '-' not cloned yet, '+' detached/changed, 'U' conflict. For '-'
+# we clone it (after telling the user); for '+'/'U' we abort clearly; for ' ' we
+# fall through straight to fetching. IFS is set to newline so a literal leading
+# space is preserved — plain `read` would eat it and make '-' indistinguishable
+# from an empty marker.
+ensure_submodule_ready() {
+    local line ch
+    while IFS=$'\n' read -r line; do
+        [ -z "$line" ] && continue
+        ch="${line:0:1}"
+        case "$ch" in
+            ' ') : ;;                                                 # initialized, on commit
+            '-') echo "FATAL: $UPSTREAM_PATH is not cloned yet; initializing it now..." >&2
+                 git submodule update --init || { echo "FATAL: failed to initialize $UPSTREAM_PATH." >&2; exit 2; }
+                 return 0 ;;                                          # only one submodule
+            '+') echo "FATAL: $UPSTREAM_PATH is checked out at a different commit than the parent records." >&2; exit 2 ;;
+            'U') echo "FATAL: $UPSTREAM_PATH has unresolved merge conflicts; resolve them before syncing." >&2; exit 2 ;;
+            *)   echo "FATAL: unexpected \$UPSTREAM_PATH status in 'git submodule status' ($ch)." >&2; exit 2 ;;
+        esac
+    done < <(git submodule status)
 }
 
 # ---- 1. fetch + advance the submodule ---------------------------------------
@@ -223,10 +252,12 @@ stage_and_commit() {
 
 # ---- main -------------------------------------------------------------------
 #
-# Flow: check preconditions -> fetch + advance the submodule -> re-materialize
-# the root -> apply patches (fail fast on stale) -> stage + commit the delta.
+# Flow: check preconditions -> ensure the upstream submodule is ready -> fetch +
+# advance the submodule -> re-materialize the root -> apply patches (fail fast
+# on stale) -> stage + commit the delta.
 main() {
     check_preconditions
+    ensure_submodule_ready
     fetch_and_advance_submodule
     materialize_root
     apply_patches
