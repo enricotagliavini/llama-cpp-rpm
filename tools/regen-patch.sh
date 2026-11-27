@@ -276,13 +276,40 @@ verify_against_working_tree() {
     [ "$bad" -eq 0 ]
 }
 
+# Ensure the pristine upstream submodule is usable before we touch it. It must
+# exist and be checked out at the commit recorded by the parent repo; otherwise
+# `git -C fedora-src ...` fails and there is nothing left to diff against. We
+# read `git submodule status`, whose first column encodes each submodule's state:
+# ' ' up-to-date, '-' not cloned yet, '+' detached/changed, 'U' conflict. For '-'
+# we clone it (after telling the user); for '+'/'U' we abort clearly; for ' ' we
+# fall through straight to regenerating. IFS is set to newline so a literal
+# leading space is preserved — plain `read` would eat it and make '-'
+# indistinguishable from an empty marker.
+ensure_submodule_ready() {
+    local line ch
+    while IFS=$'\n' read -r line; do
+        [ -z "$line" ] && continue
+        ch="${line:0:1}"
+        case "$ch" in
+            ' ') : ;;                                                 # initialized, on commit
+            '-') echo "regen-patch.sh: $UPSTREAM_PATH is not cloned yet; initializing it now..." >&2
+                 git submodule update --init || die "failed to initialize $UPSTREAM_PATH."
+                 return 0 ;;                                          # only one submodule
+            '+') die "$UPSTREAM_PATH is checked out at a different commit than the parent records." ;;
+            'U') die "$UPSTREAM_PATH has unresolved merge conflicts; resolve them before regenerating." ;;
+            *)   die "unexpected \$UPSTREAM_PATH status in git submodule status ($ch)." ;;
+        esac
+    done < <(git submodule status)
+}
+
 # ---- main -------------------------------------------------------------------
 #
-# Flow: reconstruct the pre-patch baseline -> validate the target files -> emit
-# one patch per differing file -> self-verify that the patches reproduce the
-# edited working tree.
+# Flow: ensure the upstream submodule is ready -> reconstruct the pre-patch
+# baseline -> validate the target files -> emit one patch per differing file ->
+# self-verify that the patches reproduce the edited working tree.
 main() {
     parse_args "$@"
+    ensure_submodule_ready
     if [ "$REGEN_ALL" = 0 ]; then
         [ -n "$PATCH" ] || usage
         [ -f "$PATCH" ] || die "no such patch: $PATCH"
